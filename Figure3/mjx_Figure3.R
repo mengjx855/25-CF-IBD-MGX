@@ -1,4 +1,4 @@
-#### Jinxin Meng, 20251028, 20251109 ####
+#### Jinxin Meng, 20251028, 20251122 ####
 setwd('/data/mengjx/project/10.20250623_IBD_BAC_CF_Landscape/git/Figure3/')
 pacman::p_load(tidyverse, ggpubr)
 source('../scripts/palette.R')
@@ -10,7 +10,7 @@ proj_name <- c('BushmanFD_2020','FranzosaEA_2018','HallAB_2017','HeQ_2017','Kumb
                'LloydPriceJ_2019','SchirmerM_2018','SchirmerM_2024','WengY_2019','YanQ_2023c')
 
 gene_len <- read.delim('../pipeline/uhgp.len.bz2', header = F, col.names = c('name', 'length'))
-gene_info <- read.delim('../pipeline/uhgp.m8.info.bz2', header = F) %>%
+gene_info <- read.delim('../pipeline/uhgp.m8.f.drop.info.bz2', header = F) %>%
   dplyr::select(name = 1, value = 2) %>%
   mutate(CF = stringr::str_split_i(value, ',', 1),
          CF_gene = stringr::str_split_i(value, ',', 2))
@@ -33,7 +33,6 @@ rc <- map(proj_name, ~ {
 saveRDS(rc, 'gene.rc.rds')
 
 # CF tpm
-drops <- c('CF40', 'CF58', 'CF62')
 tpm <- map(proj_name, ~ {
   rc <- data.table::fread(paste0('../data/', .x, '.rc.bz2')) %>% column_to_rownames('name')
   tpm <- rc2tpm(rc, gene_len)
@@ -41,8 +40,7 @@ tpm <- map(proj_name, ~ {
     mutate(name = gene_info$CF[match(rownames(.), gene_info$name)]) %>%
     aggregate(. ~ name, ., sum) %>%
     column_to_rownames('name') %>%
-    filter(rowSums(.) != 0) %>% 
-    filter(!rownames(.) %in% drops) } ) %>%
+    filter(rowSums(.) != 0) } ) %>%
   set_names(proj_name)
 saveRDS(tpm, 'CF.tpm.rds')
 
@@ -52,8 +50,7 @@ rc <- map(proj_name, ~ {
   mutate(rc, name = gene_info$CF[match(rownames(rc), gene_info$name)]) %>%
     aggregate(. ~ name, ., sum) %>%
     column_to_rownames('name') %>%
-    filter(rowSums(.) != 0) %>% 
-    filter(!rownames(.) %in% drops) } ) %>%
+    filter(rowSums(.) != 0) } ) %>%
   set_names(proj_name)
 saveRDS(rc, 'CF.rc.rds')
 

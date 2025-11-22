@@ -8,9 +8,17 @@ diamond blastp -d top02prc_withCF.dmnd -q /data/database/uhgg/protein_catalogue/
 seqkit fx2tab -n -i -l top02prc_withCF.faa > top02prc_withCF.len
 # filter, scov > 70, qcov > 70, pid > 50, e-value < 1e-10
 perl -e '%slen; open I, "top02prc_withCF.len"; while(<I>){chomp; @s=split/\t/; $slen{$s[0]}=$s[1]}; %qlen; open I, "/data/database/uhgg/protein_catalogue/uhgp.len"; while(<I>){chomp; @s=split/\t/; $qlen{$s[0]}=$s[1]}; while(<>){chomp; @s=split/\t/; if($s[0] ne $a){if($s[7]>$s[6]){$len=$s[7]-$s[6]+1}else{$len=$s[6]-$s[7]+1}; $qcov=$len/$qlen{$s[0]}*100; if($s[9]>$s[8]){$len=$s[9]-$s[8]+1}else{$len=$s[8]-$s[9]+1}; $scov=$len/$slen{$s[1]}*100; printf("$_\t%.2f\t%.2f\n", $qcov, $scov) if($qcov>70 && $scov>70 && $s[2]>50 && $s[10]<1e-10); $a=$s[0]}}' uhgp.m8 > uhgp.m8.f
-cut -f1 uhgp.m8.f | seqkit grep -f - /data/database/uhgg/protein_catalogue/uhgp.ffn -o uhgp.fa
-cat uhgp.m8.f | perl -e 'open I, "/data/database/uhgg/genomes-all_metadata.tsv"; %h; while(<I>){chomp;@s=split/\t/;$h{$s[0]}=$_}; while(<>){chomp;@s=split/\t/;$s[0]=~/(\S+?)_/;$x=$1; if(exists $h{$x}){print "$s[0]\t$s[1]\t$s[2]\t$s[12]\t$h{$x}\n"}else{$n=$x.".1";print "$s[0]\t$s[1]\t$s[2]\t$s[12]\t$h{$n}\n"}}' > uhgp.m8.info
+grep -v 'CF40\|CF58\|CF62' uhgp.m8.f > uhgp.m8.f.drop
+cat uhgp.m8.f.drop | perl -e 'open I, "/data/database/uhgg/genomes-all_metadata.tsv"; %h; while(<I>){chomp;@s=split/\t/;$h{$s[0]}=$_}; while(<>){chomp;@s=split/\t/;$s[0]=~/(\S+?)_/;$x=$1; if(exists $h{$x}){print "$s[0]\t$s[1]\t$s[2]\t$s[12]\t$h{$x}\n"}else{$n=$x.".1";print "$s[0]\t$s[1]\t$s[2]\t$s[12]\t$h{$n}\n"}}' > uhgp.m8.f.drop.info
+cut -f1 uhgp.m8.f.drop | seqkit grep -f - /data/database/uhgg/protein_catalogue/uhgp.ffn -o uhgp.fa
 emapper.py --cpu 0 -i top02prc_withCF.faa -o eggnog-mapper --evalue 1e-10
+
+
+#### uhgp-90 spread to uhgg ####
+perl -e '%h;open I, "$ARGV[0]";while(<I>){chomp;@s=split/\t/; $h{$s[0]}=$s[1]}; open I, "$ARGV[1]";while(<I>){chomp;@s=split/\t/;print "$s[0]\t$s[1]\t$h{$s[0]}\n" if exists $h{$s[0]}}' uhgp.m8.f.drop /data/database/uhgg/protein_catalogue/uhgp-90.tsv > uhgp.m8.f.drop.spread
+perl -e '$h;while(<>){chomp;@s=split/\t/; $h{$s[2]}{$s[1]}++; }; for $i (keys %h){@l=keys(%{$h{$i}}); print "$i\t".join(";", @l)."\n" }' uhgp.m8.f.drop.spread > uhgp.m8.f.drop.spread.gene_paste
+perl -e '$h;while(<>){chomp;@s=split/\t/; @s2=split/_/,$s[1]; $h{$s[2]}{$s2[0]}++; }; for $i (keys %h){@l=keys(%{$h{$i}}); print "$i\t".join(";", @l)."\n" }' uhgp.m8.f.drop.spread > uhgp.m8.f.drop.spread.genome_paste
+perl -e '$h;while(<>){chomp;@s=split/\t/; @s2=split/_/,$s[1]; @s3=split/,/,$s[2]; $h{$s3[0]}{$s2[0]}++; }; for $i (keys %h){@l=keys(%{$h{$i}}); print "$i\t".join(";", @l)."\n" }' uhgp.m8.f.drop.spread > uhgp.m8.f.drop.spread.CF_paste
 
 
 #### CF metagenomic profiling ####
