@@ -1,5 +1,5 @@
-#### Jinxin Meng, 20251028, 20251109 ####
-setwd('/data/mengjx/project/10.20250623_IBD_BAC_CF_Landscape/git/Figure7/')
+#### Jinxin Meng, 20251028, 20251215 ####
+setwd('/data/mengjx/project/10.20250623_IBD_BAC_CF_Landscape/git/Figure6/')
 pacman::p_load(tidyverse, ggpubr)
 source('../scripts/palette.R')
 source('../scripts/calcu_difference.R')
