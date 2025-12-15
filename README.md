@@ -6,4 +6,4 @@
 - FigureX: the scripts and necessary files for each figure
 
 > If you find this code useful, we would appreciate if you cite our paper (in preparing).
-
+> Meng, Jin-Xin, et al. "Landscape of colonization factors in human gut microbiome and their association with inflammatory bowel disease." (2026).
