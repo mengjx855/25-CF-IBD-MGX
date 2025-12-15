@@ -5,3 +5,5 @@
 - data: the intermediate data during analysis
 - FigureX: the scripts and necessary files for each figure
 
+> If you find this code useful, we would appreciate if you cite our paper (in preparing).
+

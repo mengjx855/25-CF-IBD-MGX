@@ -1,4 +1,4 @@
-#### Jinxin Meng, 20251028, 20251122 ####
+#### Jinxin Meng, 20251028, 20251215 ####
 setwd('/data/mengjx/project/10.20250623_IBD_BAC_CF_Landscape/git/Figure2/')
 pacman::p_load(tidyverse, ggpubr)
 source('../scripts/palette.R')
@@ -76,7 +76,7 @@ map2_vec(names(test), test,
   guides(fill = 'none')
 ggsave('adonis.test.jaccard.pdf', width = 4, height = 5)
 
-#### Fig. 2c and Fig. S1 ####
+#### Fig. 2c and Fig. S2 ####
 dist <- read_rds('dist.jaccard.rds')
 
 taxa <- data.frame(ref_species = labels(dist)) %>% 
@@ -204,21 +204,20 @@ test_data <- rownames_to_column(counts, 'genome') %>%
   data.frame() %>% 
   rownames_to_column('CF')
 
-plot_point <- mutate(
+cluster_data <- count(cluster, cluster) %>% 
+  mutate(cluster = paste0('cluster_', cluster))
+cluster_data <- split(cluster_data$n, cluster_data$cluster)
+
+prop_data <- prop_data <- mutate(
   test_data,
-  cluster_1 = cluster_1 / sum(cluster_1) * 100,
-  cluster_2 = cluster_2 / sum(cluster_2) * 100,
-  cluster_3 = cluster_3 / sum(cluster_3) * 100,
+  cluster_1 = cluster_1 / cluster_data$cluster_1 * 100,
+  cluster_2 = cluster_2 / cluster_data$cluster_2 * 100,
+  cluster_3 = cluster_3 / cluster_data$cluster_3 * 100,
   avg = (cluster_1 + cluster_2 + cluster_3) / 3)
 
-cramer_test <- rstatix::cramer_v(column_to_rownames(test_data, 'CF'))
-chi_test <- rstatix::chisq_test(column_to_rownames(test_data, 'CF'))
-
-ggtern(plot_point, aes(cluster_1, cluster_2, cluster_3)) +
+ggtern(prop_data, aes(cluster_1, cluster_2, cluster_3)) +
   geom_point(aes(fill = avg), shape = 21, size = 4) +
   geom_text(aes(label = CF), size = 2) +
-  labs(fill = 'Avg. prevalence', 
-       title = paste0("Cramér's V: ", signif(cramer_test, 3), ', ', 'P < 2.2e-16')) +
   scale_fill_gradientn(colours = rev(pald('Spectral'))) +
   labs(x = 'CF prevalence in Cluster-1',
        y = 'CF prevalence in Cluster-2',
@@ -227,35 +226,153 @@ ggtern(plot_point, aes(cluster_1, cluster_2, cluster_3)) +
   theme(axis.ticks.length = unit(2, 'mm'))
 ggsave('pam.3cluster.ternary_plot.pdf', width = 10, height = 8)
 
-# calcu proportion difference for CF
-CF_name <- filter(rowwise(test_data), sum(c(cluster_1 >=5 , cluster_2 >=5, cluster_3 >=5)) >=1 ) %>% 
-  pull(CF)
-
-chisq_test <- map_dfr(
-  CF_name, ~ 
-    mutate(test_data, CF = ifelse(CF != .x, 'Other_CFs', .x)) %>% 
-    aggregate(. ~ CF, ., sum) %>% 
+# difference, fisher's exact test
+fisher_test <- map_dfr(
+  test_data$CF, ~ 
+    filter(test_data, CF == .x) %>% 
+    add_row(CF = 'none',
+            cluster_1 = cluster_data$cluster_1 - .$cluster_1, 
+            cluster_2 = cluster_data$cluster_2 - .$cluster_2, 
+            cluster_3 = cluster_data$cluster_3 - .$cluster_3) %>% 
     column_to_rownames('CF') %>%
-    rstatix::chisq_test() %>% 
+    rstatix::fisher_test(detailed = T, simulate.p.value = T, B = 10000) %>% 
     add_column(CF = .x,  .before = 1) ) %>% 
   mutate(padj = p.adjust(p, 'BH'), .after = 'p')
 
-pairwise_chisq_test <- map_dfr(
-  CF_name, ~ 
-    mutate(test_data, CF = ifelse(CF != .x, 'Other_CFs', .x)) %>% 
-    aggregate(. ~ CF, ., sum) %>% 
-    mutate(CF = factor(CF, c(.x, 'Other_CFs'))) %>% 
-    column_to_rownames('CF') %>%
-    rstatix::pairwise_chisq_gof_test(p.adjust.method = 'BH') %>% 
-    add_column(CF = .x, .before = 1) )
+# compare with other, and enrichment fold change
+pairwise_fisher_test <- map_dfr(
+  test_data$CF, ~ {
+    .data <- filter(test_data, CF == .x) %>% 
+      add_row(CF = 'none',
+              cluster_1 = cluster_data$cluster_1 - .$cluster_1, 
+              cluster_2 = cluster_data$cluster_2 - .$cluster_2, 
+              cluster_3 = cluster_data$cluster_3 - .$cluster_3) %>% 
+      column_to_rownames('CF')
+    
+    efc <- map_dfr(
+      c('cluster_1', 'cluster_2', 'cluster_3'), \(x) {
+        .other <- setdiff(c('cluster_1','cluster_2','cluster_3'), x)
+        .test_data <- mutate(.data, others = .data[[.other[1]]] + .data[[.other[2]]]) %>% 
+          select(all_of(x), others)
+        .prop <- .test_data[.x,] / colSums(.test_data)
+        rstatix::fisher_test(.test_data, detailed = T, simulate.p.value = T, B = 10000) %>% 
+          add_column(efc = unlist(.prop[1] / .prop[2], use.names = F), .after = 'estimate') %>% 
+          add_column(name = .x, cluster = x, .before = 1) } ) %>%
+      select(-p.signif) %>% 
+      mutate(padj = p.adjust(p, 'BH'),
+             padj.signif = add_plab(padj), .after = 'p')
+  } )
 
 list(
-  prop = plot_point,
-  chisq_test = chisq_test, 
-  pairwise_chisq_test = pairwise_chisq_test
-) %>% openxlsx::write.xlsx('pam.3cluster.CF.chisq_test.xlsx')
+  prop = prop_data,
+  fisher_test = fisher_test, 
+  pairwise_fisher_test = pairwise_fisher_test) %>% 
+  openxlsx::write.xlsx('pam.3cluster.CF.fisher_test.xlsx')
 
-#### Fig. 2h ####
+#### Fig. 2h-j ####
+profile <- data.table::fread('../pipeline/KO.profile.bz2') %>% 
+  column_to_rownames('name') %>% 
+  apply(2, \(x) ifelse(x > 0, 1, 0)) %>%
+  data.frame() %>% 
+  select(all_of(cluster$sample)) %>% 
+  filter(rowSums(.) != 0)
+
+dist_x <- vegan::vegdist(t(profile), method = 'jaccard', binary = T) # KO_profile
+dist_y <- read_rds('dist.jaccard.rds') # CF_profile
+mantel_test <- vegan::mantel(dist_y, dist_y, method = 'spearman', 
+                             permutations = 999, parallel = 110)
+write_rds(mantel_test, 'KO.profile.mantel_test.rds')
+
+# difference
+test_data <- data.frame(t(profile)) %>% 
+  mutate(cluster = cluster$cluster[match(rownames(.), cluster$sample)]) %>% 
+  aggregate(. ~ cluster, ., sum) %>% 
+  mutate(cluster = paste0('cluster_', cluster)) %>% 
+  column_to_rownames('cluster') %>% 
+  t %>% data.frame() %>% 
+  rownames_to_column('name')
+
+prop_data <- mutate(
+  test_data,
+  cluster_1 = cluster_1 / cluster_data$cluster_1 * 100,
+  cluster_2 = cluster_2 / cluster_data$cluster_2 * 100,
+  cluster_3 = cluster_3 / cluster_data$cluster_3 * 100)
+
+# cluster with others 
+pairwise_fisher_test <- map_dfr(
+  test_data$name, \(x) {
+    .data <- filter(test_data, name == x) %>% 
+      add_row(name = 'none',
+              cluster_1 = cluster_data$cluster_1 - .$cluster_1, 
+              cluster_2 = cluster_data$cluster_2 - .$cluster_2, 
+              cluster_3 = cluster_data$cluster_3 - .$cluster_3)
+    
+    map_dfr(c('cluster_1','cluster_2','cluster_3'), \(y) {
+      .other <- setdiff(c('cluster_1','cluster_2','cluster_3'), y)
+      .test_data <- column_to_rownames(.data, 'name') %>%
+        mutate(others = .data[[.other[1]]] + .data[[.other[2]]]) %>% 
+        select(all_of(y), others)
+      .prop_data <- .test_data[1,] / colSums(.test_data) * 100
+      rstatix::fisher_test(.test_data, detailed = T, simulate.p.value = T, B = 10000) %>% 
+        add_column(name = x,
+                   cluster = y,
+                   prop_main = .prop_data[[y]],
+                   prop_other = .prop_data[['others']], 
+                   efc = .prop_data[[1]] / .prop_data[[2]], .before = 1) }) %>%
+      select(-p.signif) %>% 
+      mutate(padj = p.adjust(p, 'BH'),
+             padj.signif = add_plab(padj), .after = 'p')
+  }, .progress = T)
+openxlsx::write.xlsx(pairwise_fisher_test, 'KO.profile.pairwise.fisher_test.xlsx')
+
+difference <- group_by(pairwise_fisher_test, name) %>% 
+  group_modify(~ filter(.x, padj < 0.05 & efc > 2) %>%
+                 arrange(desc(efc)) %>% 
+                 head(n = 1)) %>% 
+  ungroup()
+
+# KEGG terms enrichment analysis
+kegg_db <- read.delim('../pipeline/KO_level_A_B_C_D_Description.bz2') %>% 
+  filter(!lvAdes %in% c('Organismal Systems', 'Human Diseases')) %>% 
+  mutate(gene = lvD, term = paste0('[', lvC, '] ', lvCdes)) %>% 
+  select(term, gene)
+
+results <- map(
+  c('cluster_1', 'cluster_2', 'cluster_3'), ~ 
+    filter(difference, cluster == .x & efc > 2) %>%
+    pull(name) %>% 
+    clusterProfiler::enricher(minGSSize = 1, maxGSSize = 2000, TERM2GENE = kegg_db, 
+                              pvalueCutoff = .05, qvalueCutoff = .05) %>% 
+    data.frame ) %>% 
+  set_names(c('cluster_1', 'cluster_2', 'cluster_3'))
+openxlsx::write.xlsx(results, 'KO.profile.ORA.results.xlsx')
+
+plots <- map(
+  c('cluster_1', 'cluster_2', 'cluster_3'), ~ 
+    data.frame(results[[.x]], row.names = NULL) %>% 
+    select(-geneID, -Description) %>% 
+    filter(!grepl(' - ', ID), !grepl('BR', ID), 
+           !grepl(c('unknown|prediction'), ID)) %>% 
+    mutate(ID = str_extract(ID, 'C\\d+')) %>% 
+    arrange(p.adjust) %>% 
+    head(n = 20) %>% 
+    ggscatter('ID', 'FoldEnrichment', fill = 'p.adjust', shape = 21, rotate = T, 
+              size = 'FoldEnrichment', xlab = '', legend = 'right', 
+              title = paste0('Top 20 ', str_to_sentence(.x), '-enriched KEGG Terms')) +
+    scale_size_continuous(range = c(4, 6)) +
+    scale_fill_distiller(palette = 'Spectral', labels = scales::label_scientific()) +
+    theme(aspect.ratio = 2,
+          axis.ticks.length = unit(2, 'mm'),
+          axis.text = element_text(color = 'black', size = 11),
+          plot.title = element_text(face = 'bold', hjust = .5),
+          panel.grid.major = element_line(color = 'grey88', linewidth = .5)) +
+    guides(fill = guide_colorbar(title = 'FDR', order = 1),
+           size = guide_legend(order = 2))
+)
+cowplot::plot_grid(plotlist = plots, align = 'v', nrow = 1)
+ggsave('KO.profile.ORA.results.top20.dotchart.pdf', width = 24, height = 6)
+
+#### Fig. 2k ####
 # calcu proportion difference for phylum
 test_data <- mutate(
   cluster, 
@@ -263,8 +380,9 @@ test_data <- mutate(
   count(phylum, cluster) %>% 
   spread('cluster', 'n', fill = 0)
 
-cramer_test <- rstatix::cramer_v(column_to_rownames(test_data, 'phylum'))
-chi_test <- rstatix::chisq_test(column_to_rownames(test_data, 'phylum'))
+fisher_test <- rstatix::fisher_test(column_to_rownames(test_data, 'phylum'), 
+                                    simulate.p.value = T, B = 10000, detailed = T)
+cramer_test <- effectsize::cramers_v(column_to_rownames(test_data, 'phylum'))
 
 mutate(cluster, 
        cluster = paste0('cluster_', cluster),
@@ -286,45 +404,44 @@ prop_data <- mutate(
   cluster_2 = cluster_2 / sum(cluster_2) * 100,
   cluster_3 = cluster_3 / sum(cluster_3) * 100)
 
-phylum_name <- filter(rowwise(test_data), sum(c(cluster_1 >=5 , cluster_2 >=5, cluster_3 >=5)) >=1 ) %>% 
-  pull(phylum)
-
-chisq_test <- map_dfr(
-  phylum_name, ~ 
+fisher_test <- map_dfr(
+  test_data$phylum, ~ 
     mutate(test_data, phylum = ifelse(phylum != .x, 'Other_phyla', .x)) %>% 
     aggregate(. ~ phylum, ., sum) %>% 
     mutate(phylum = factor(phylum, c(.x, 'Other_phyla'))) %>% 
     arrange(phylum) %>% 
     column_to_rownames('phylum') %>%
-    rstatix::chisq_test() %>% 
+    rstatix::fisher_test(detailed = T, simulate.p.value = T, B = 10000) %>% 
     add_column(phylum = .x, .before = 1) ) %>% 
   mutate(padj = p.adjust(p, 'BH'), .after = 'p')
 
-pairwise_chisq_test <- map_dfr(
-  phylum_name, ~ 
+pairwise_fisher_test <- map_dfr(
+  test_data$phylum, ~ 
     mutate(test_data, phylum = ifelse(phylum != .x, 'Other_phyla', .x)) %>% 
     aggregate(. ~ phylum, ., sum) %>% 
     mutate(phylum = factor(phylum, c(.x, 'Other_phyla'))) %>% 
     arrange(phylum) %>% 
     column_to_rownames('phylum') %>%
-    rstatix::pairwise_chisq_gof_test(p.adjust.method = 'BH') %>% 
-    add_column(phylum = .x, .before = 1) ) 
+    rstatix::pairwise_fisher_test(p.adjust.method = 'BH', detailed = T, 
+                                  simulate.p.value = T, B = 10000) %>% 
+    add_column(phylum = .x, .before = 1) )
 
 list(
   prop_data  = prop_data,
-  chisq_test = chisq_test, 
-  pairwise_chisq_test = pairwise_chisq_test
-) %>% openxlsx::write.xlsx('pam.3cluster.phylum.chisq_test.xlsx')
+  fisher_test = fisher_test, 
+  pairwise_fisher_test = pairwise_fisher_test
+) %>% openxlsx::write.xlsx('landscape3/pam.3cluster.phylum.fisher_test.xlsx')
 
-#### Fig. 2i ####
+#### Fig. 2l ####
 test_data <- mutate(
   cluster,
   cluster = paste0('cluster_', cluster)) %>% 
   count(family, cluster) %>% 
   spread('cluster', 'n', fill = 0)
 
-cramer_test <- rstatix::cramer_v(column_to_rownames(test_data, 'family'))
-chi_test <- rstatix::chisq_test(column_to_rownames(test_data, 'family'))
+cramer_test <- effectsize::cramers_v(column_to_rownames(test_data, 'family'))
+fisher_test <- rstatix::fisher_test(column_to_rownames(test_data, 'family'), 
+                                    simulate.p.value = T, B = 10000)
 
 prop_data <- mutate(
   test_data, 
@@ -332,50 +449,43 @@ prop_data <- mutate(
   cluster_2 = cluster_2 / sum(cluster_2) * 100,
   cluster_3 = cluster_3 / sum(cluster_3) * 100)
 
-family_name <- filter(rowwise(test_data), sum(c(cluster_1 >=5 , cluster_2 >=5, cluster_3 >=5)) >=1 ) %>% 
-  pull(family)
-
-chisq_test <- map_dfr(
-  family_name, ~ 
-    mutate(test_data, family = ifelse(family != .x, 'Other_families', .x)) %>% 
-    aggregate(. ~ family, ., sum) %>% 
-    mutate(family = factor(family, c(.x, 'Other_families'))) %>% 
-    arrange(family) %>% 
+fisher_test <- map_dfr(
+  test_data$family, ~
+    mutate(test_data, family = ifelse(family != .x, 'Other_families', .x)) %>%
+    aggregate(. ~ family, ., sum) %>%
+    mutate(family = factor(family, c(.x, 'Other_families'))) %>%
+    arrange(family) %>%
     column_to_rownames('family') %>%
-    rstatix::chisq_test() %>% 
-    add_column(family = .x, .before = 1) ) %>% 
+    rstatix::fisher_test(detailed = T, simulate.p.value = T, B = 10000) %>%
+    add_column(family = .x, .before = 1) ) %>%
   mutate(padj = p.adjust(p, 'BH'), .after = 'p')
 
-pairwise_chisq_test <- map_dfr(
-  family_name, ~ 
-    mutate(test_data, family = ifelse(family != .x, 'Other_families', .x)) %>% 
-    aggregate(. ~ family, ., sum) %>% 
-    mutate(family = factor(family, c(.x, 'Other_families'))) %>% 
-    arrange(family) %>% 
+pairwise_fisher_test <- map_dfr(
+  test_data$family, ~
+    mutate(test_data, family = ifelse(family != .x, 'Other_families', .x)) %>%
+    aggregate(. ~ family, ., sum) %>%
+    mutate(family = factor(family, c(.x, 'Other_families'))) %>%
+    arrange(family) %>%
     column_to_rownames('family') %>%
-    rstatix::pairwise_chisq_gof_test(p.adjust.method = 'BH') %>% 
+    rstatix::pairwise_fisher_test(p.adjust.method = 'BH', detailed = T,
+                                  simulate.p.value = T, B = 10000) %>%
     add_column(family = .x, .before = 1) )
 
 list(
   prop_data = prop_data,
-  chisq_test = chisq_test, 
-  pairwise_chisq_test = pairwise_chisq_test
-) %>% openxlsx::write.xlsx('landscape2/pam.3cluster.family.chisq_test.xlsx')
+  fisher_test = fisher_test,
+  pairwise_fisher_test = pairwise_fisher_test
+) %>% openxlsx::write.xlsx('pam.3cluster.family.fisher_test.xlsx')
 
-plot_text <- filter(chisq_test, padj < 0.05) %>% 
+plot_text <- filter(fisher_test, padj < 0.05) %>% 
   filter(family != 'f__') %>% 
   mutate(plab = add_plab(padj))
 
-plot_prop <- test_data %>% 
-  mutate(cluster1 = cluster_1 / sum(cluster_1),
-         cluster2 = cluster_2 / sum(cluster_2),
-         cluster3 = cluster_3 / sum(cluster_3)
-  ) %>% 
+plot_prop <- prop_data %>% 
   filter(family %in% plot_text$family) %>% 
-  dplyr::select(family, cluster1, cluster2, cluster3) %>%
   rowwise() %>% 
-  mutate(enriched = ifelse(cluster1 > cluster2 & cluster1 > cluster3, 'cluster1', 
-                           ifelse(cluster2 > cluster1 & cluster2 > cluster3, 'cluster2', 'cluster3'))) %>% 
+  mutate(enriched = ifelse(cluster_1 > cluster_2 & cluster_1 > cluster_3, 'cluster_1', 
+                           ifelse(cluster_2 > cluster_1 & cluster_2 > cluster_3, 'cluster_2', 'cluster_3'))) %>% 
   group_by(enriched) %>% 
   group_modify(~ arrange(.x, desc(!!sym(.y$enriched))) %>% head(10) ) %>% 
   ungroup() %>% 
@@ -387,8 +497,8 @@ p1 <- ggbarplot(
   plot_prop, 'family', 'value', fill = 'group', position = position_dodge2(),
   palette = c('#EA8379','#7DAEE0','#B395BD'), xlab = '', ylab = 'Proportion', 
   legend = 'right', x.text.angle = 90, color = NA, width = .8,
-  subtitle = paste0("Cramér's V: ", signif(cramer_test, 3), ', ', 'P < 2.2e-16')) +
-  geom_text(aes(family, 0.21, label = plab), filter(plot_text, family %in% plot_prop$family), 
+  subtitle = paste0("Cramér's V: ", signif(cramer_test$Cramers_v_adjusted, 3), ', ', 'P < 0.0001')) +
+  geom_text(aes(family, 21, label = plab), filter(plot_text, family %in% plot_prop$family), 
             inherit.aes = F, angle = 90, color = 'red', vjust = .8) +
   scale_y_continuous(expand = c(.01, .003)) +
   geom_vline(xintercept = c(10.5, 20.5), linetype = 'longdash', linewidth = .3) +
@@ -398,7 +508,6 @@ p1 <- ggbarplot(
         panel.background = element_blank(),
         panel.border = element_rect(linewidth = .8, color = 'black', fill = 'transparent'))
 
-gg.gap::gg.gap(plot = p1, segments = c(.25, .55), ylim = c(0, .6), 
-               rel_heights = c(0.5, 0, 0.1), tick_width = .05)
-
+gg.gap::gg.gap(plot = p1, segments = c(25, 55), ylim = c(0, 60), 
+               rel_heights = c(0.5, 0, 0.1), tick_width = 5)
 ggsave('pam.3cluster.family.barplot.pdf', width = 10, height = 6.5)

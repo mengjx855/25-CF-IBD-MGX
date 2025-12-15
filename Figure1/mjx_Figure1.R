@@ -1,4 +1,4 @@
-#### Jinxin Meng, 20251028, 20251122 ####
+#### Jinxin Meng, 20251028, 20251215 ####
 setwd('/data/mengjx/project/10.20250623_IBD_BAC_CF_Landscape/git/Figure1/')
 pacman::p_load(tidyverse, ggpubr)
 source('../scripts/palette.R')
@@ -59,6 +59,8 @@ tibble(sites = rare_data$sites,
 ggsave('rare.data.species.pdf', width = 5, height = 5)
 
 #### Fig. 1d ####
+# phylogenetic tree was visualized using iTol (https://itol.embl.de/)
+#### Fig. S1 ####
 genome_info <- data.table::fread('../pipeline/genomes-all_metadata.tsv.bz2') %>% 
   mutate(genome = sub('\\.\\d+$', '', Genome),
          phylum = str_split_i(Lineage, pattern = ';', 2),

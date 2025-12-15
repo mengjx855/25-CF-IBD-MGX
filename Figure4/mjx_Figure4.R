@@ -1,11 +1,11 @@
-#### Jinxin Meng, 20251028, 20251109 ####
+#### Jinxin Meng, 20251028, 20251115 ####
 setwd('/data/mengjx/project/10.20250623_IBD_BAC_CF_Landscape/git/Figure4/')
 pacman::p_load(tidyverse, ggpubr)
 source('../scripts/palette.R')
 source('../scripts/calcu_difference.R')
 source('../scripts/plot_Procrustes.R')
 
-#### Fig. 4a and Fig. S2 ####
+#### Fig. 4a and Fig. S3 ####
 proj_name <- c('BushmanFD_2020','FranzosaEA_2018','HallAB_2017','HeQ_2017','KumbhariA_2024',
                'LloydPriceJ_2019','SchirmerM_2018','SchirmerM_2024','WengY_2019','YanQ_2023c')
 
