@@ -5,5 +5,5 @@
 - data: the intermediate data during analysis
 - FigureX: the scripts and necessary files for each figure
 
-> If you find this code useful, we would appreciate if you cite our paper (in preparing).  
+If you find this code useful, please consider citing our forthcoming paper (in preparing).  
 > Meng, Jin-Xin, et al. "An atlas of colonization factors in human gut microbiome reveals conserved microbial strategies and inflammatory bowel disease signatures." (2026).
