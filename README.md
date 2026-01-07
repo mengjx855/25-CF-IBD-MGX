@@ -6,7 +6,7 @@
 - data: the intermediate data during analysis
 - FigureX: the scripts and necessary files for each figure
 
-The database and software version as follow:
+The database and software used in this study as follow:
 - DIAMOND (v2.1.11.165),
 - eggNOG-mapper (v2.1),
 - eggnog database (v5.0),
