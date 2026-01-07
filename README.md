@@ -1,7 +1,6 @@
 ## An atlas of colonization factors in human gut microbiome reveals conserved microbial strategies and inflammatory bowel disease signatures 
 
 **Folder and File Structure**
-
 - pipeline: metagenomic (MGX) abundance and metatranscriptomic (MTX) expression estimation, as well as CF gene identification in UHGP-90 and UHGG catalogs (v2.0.2)
 - scripts: some R function used in this program
 - data: the intermediate data during analysis
