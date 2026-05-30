@@ -37,7 +37,10 @@ rf_Kfold <- function(profile, group, k, seed = 2024, ntree = 1000) {
     test <- profile[sample_j,]
     train <- profile[-sample_j,]
     set.seed(seed)
-    rf_model <- randomForest(group ~ ., data = train, ntree = ntree, importance = F, proximity = T)
+    X <- train[, colnames(train) != 'group']
+    Y <- train$group
+    rf_model <- randomForest::randomForest(x = X, y = Y, ntree = ntree,
+                                           importance = F, proximity = T)
     pred_i <- data.frame(predict(rf_model, test, type = 'prob'))
     pred <- rbind(pred, pred_i)
     setTxtProgressBar(pb, j/length(sample_result)) # 进度计算

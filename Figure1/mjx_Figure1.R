@@ -1,5 +1,5 @@
-#### Jinxin Meng, 20251028, 20251215 ####
-setwd('/data/mengjx/project/10.20250623_IBD_BAC_CF_Landscape/git/Figure1/')
+#### Jin-Xin Meng, 20251028, 20260530 ####
+setwd('/data/mengjx/project/10.20250623_IBD_BAC_CF_Landscape/github/Figure1/')
 pacman::p_load(tidyverse, ggpubr)
 source('../scripts/palette.R')
 source('../scripts/transform_rc.R')
@@ -8,15 +8,17 @@ source('../scripts/plot_pie.R')
 #### data ####
 data <- data.table::fread('../pipeline/uhgp.m8.f.drop.info.bz2') %>% 
   dplyr::select(query = V1, subject = V2, genome = V5, ref_species = V18, lineage = V19) %>% 
-  mutate(CF = str_split_i(subject, pattern = ',', 1),
-         CF_gene = str_split_i(subject, pattern = ',', 2),
-         domain = str_split_i(lineage, pattern = ';', 1),
-         phylum = str_split_i(lineage, pattern = ';', 2),
-         class = str_split_i(lineage, pattern = ';', 3),
-         order = str_split_i(lineage, pattern = ';', 4),
-         family = str_split_i(lineage, pattern = ';', 5),
-         genus = str_split_i(lineage, pattern = ';', 6),
-         species = str_split_i(lineage, pattern = ';', 7) ) %>% 
+  mutate(
+    CF = str_split_i(subject, pattern = ',', 1),
+    CF_gene = str_split_i(subject, pattern = ',', 2),
+    domain = str_split_i(lineage, pattern = ';', 1),
+    phylum = str_split_i(lineage, pattern = ';', 2),
+    class = str_split_i(lineage, pattern = ';', 3),
+    order = str_split_i(lineage, pattern = ';', 4),
+    family = str_split_i(lineage, pattern = ';', 5),
+    genus = str_split_i(lineage, pattern = ';', 6),
+    species = str_split_i(lineage, pattern = ';', 7)
+  ) %>% 
   select(-lineage)
 
 data.table::fwrite(data, 'CF_gene.metadata.tsv', sep = '\t')
@@ -25,50 +27,73 @@ data.table::fwrite(data, 'CF_gene.metadata.tsv', sep = '\t')
 select(data, CF) %>% 
   count(CF) %>% 
   rename(name = 1) %>% 
-  plot_pie(top_n = 14, color = '#000000', hemi = T, start = 90,
-           fill = colorRampPalette(pald('Spectral')[3:11])(15),
-           title = '78,579 CF gene homologs in UHGP, across 79 CFs')
+  plot_pie(
+    top_n = 14, color = '#000000', hemi = T, start = 90,
+    fill = colorRampPalette(pald('Spectral')[3:11])(15),
+    title = '78,579 CF homologs in UHGP, across 79 CFs'
+  )
+
 ggsave('counts.uhgp.hemi_pie.pdf', width = 4, height = 4)
 
 #### Fig. 1b ####
-data <- read.delim('../pipeline/uhgp.m8.f.drop.spread.CF_count.bz2', header = F, 
-                   col.names = c('name', 'n'))
-plot_pie(data, top_n = 14, color = '#000000', hemi = T, start = 90,
-         fill = colorRampPalette(pald('Spectral')[3:11])(15),
-         title = '7,056,385 CF gene homologs in UHGG, across 79 CFs, 
-         across 4,716 species (4,716/4,745), across 289,022 genomes (289,022/289,231)')
+data <- read.delim(
+  '../pipeline/uhgp.m8.f.drop.spread.CF_count.bz2', 
+  header = F,  col.names = c('name', 'n')
+)
+
+plot_pie(
+  data, top_n = 14, color = '#000000', hemi = T, start = 90,
+  fill = colorRampPalette(pald('Spectral')[3:11])(15),
+  title = '7,056,385 CF homologs in UHGG, across 79 CFs, 
+  across 4,716 species (4,716/4,745), across 289,022 genomes (289,022/289,231)')
+
 ggsave('counts.uhgg.hemi_pie.pdf', width = 4, height = 4)
 
 #### Fig. 1c ####
-counts <- data.table::fread('../pipeline/uhgp.m8.f.drop.spread.species.binary.for_gene.bz2', check.names = F) %>% 
+counts <- data.table::fread(
+  '../pipeline/uhgp.m8.f.drop.spread.species.binary.for_gene.bz2', 
+  check.names = F) %>% 
   column_to_rownames('name') %>% 
-  t %>% data.frame()
+  t %>% 
+  data.frame()
 
 rare_data <- vegan::specaccum(counts, permutations = 999, method = 'random')
 
-tibble(sites = rare_data$sites,
-       richness = rare_data$richness) %>% 
-  ggline('sites', 'richness', xlab = 'Number of species', 
-         ylab = 'Number of reference genes', plot_type = 'l', linewidth = .8) +
-  theme(aspect.ratio = 1,
-        axis.line = element_blank(),
-        axis.ticks.length = unit(2, 'mm'), 
-        panel.grid.major = element_line(linewidth = .8, color = 'grey88'),
-        panel.background = element_blank(),
-        panel.border = element_rect(linewidth = .8, color = 'black', fill = 'transparent'))
+tibble(
+  sites = rare_data$sites,
+  richness = rare_data$richness
+  ) %>% 
+  ggline(
+    'sites', 'richness', xlab = 'Number of species', 
+    ylab = 'Number of reference proteins', plot_type = 'l', linewidth = .8
+  ) +
+  theme(
+    aspect.ratio = 1,
+    axis.line = element_blank(),
+    axis.ticks.length = unit(2, 'mm'), 
+    panel.grid.major = element_line(linewidth = .8, color = 'grey88'),
+    panel.background = element_blank(),
+    panel.border = element_rect(linewidth = .8, color = 'black', fill = 'transparent')
+  )
+
 ggsave('rare.data.species.pdf', width = 5, height = 5)
 
 #### Fig. 1d ####
 # phylogenetic tree was visualized using iTol (https://itol.embl.de/)
+
 #### Fig. S1 ####
 genome_info <- data.table::fread('../pipeline/genomes-all_metadata.tsv.bz2') %>% 
-  mutate(genome = sub('\\.\\d+$', '', Genome),
-         phylum = str_split_i(Lineage, pattern = ';', 2),
-         family = str_split_i(Lineage, pattern = ';', 5),
-         genus = str_split_i(Lineage, pattern = ';', 6),
-         species = str_split_i(Lineage, pattern = ';', 7))
+  mutate(
+    genome = sub('\\.\\d+$', '', Genome),
+    phylum = str_split_i(Lineage, pattern = ';', 2),
+    family = str_split_i(Lineage, pattern = ';', 5),
+    genus = str_split_i(Lineage, pattern = ';', 6),
+    species = str_split_i(Lineage, pattern = ';', 7)
+  )
 
-data <- data.table::fread('../pipeline/uhgp.m8.f.drop.spread.species.binary.bz2') %>% 
+data <- data.table::fread(
+  '../pipeline/uhgp.m8.f.drop.spread.species.binary.bz2'
+  ) %>% 
   column_to_rownames('name')
 
 # tile plot
@@ -78,6 +103,7 @@ plot_data <- data %>%
   column_to_rownames('phylum') %>% 
   apply(2, \(x) ifelse(x != 0, log10(x), 0)) %>% 
   data.frame()
+
 plot_data <- plot_data[rowSums(plot_data > 0) != 0, colSums(plot_data > 0) != 0]
 
 phylum_level <- rev(rownames(plot_data)[hclust(dist(plot_data))$order])

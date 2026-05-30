@@ -1,112 +1,242 @@
-#### Jinxin Meng, 20251028, 20251115 ####
-setwd('/data/mengjx/project/10.20250623_IBD_BAC_CF_Landscape/git/Figure4/')
+#### Jinxin Meng, 20251028, 20260530 ####
+setwd('/data/mengjx/project/10.20250623_IBD_BAC_CF_Landscape/github/Figure4/')
 pacman::p_load(tidyverse, ggpubr)
 source('../scripts/palette.R')
 source('../scripts/calcu_difference.R')
-source('../scripts/plot_Procrustes.R')
+source('../scripts/transform_rc.R')
 
-#### Fig. 4a and Fig. S3 ####
-proj_name <- c('BushmanFD_2020','FranzosaEA_2018','HallAB_2017','HeQ_2017','KumbhariA_2024',
-               'LloydPriceJ_2019','SchirmerM_2018','SchirmerM_2024','WengY_2019','YanQ_2023c')
+#### profile preprocess ####
+proj_name <- c(
+  'BushmanFD_2020','FranzosaEA_2018','HallAB_2017','HeQ_2017','KumbhariA_2024',
+  'LloydPriceJ_2019','SchirmerM_2018','SchirmerM_2024','WengY_2019','YanQ_2023c'
+)
 
-tpm <- readRDS('../Figure3/CF.tpm.rds')
+gene_len <- read.delim('../pipeline/uhgp.len.bz2', header = F, col.names = c('name', 'length'))
+gene_info <- read.delim('../pipeline/uhgp.m8.f.drop.info.bz2', header = F) %>%
+  dplyr::select(name = 1, value = 2) %>%
+  mutate(CF = stringr::str_split_i(value, ',', 1),
+         CF_gene = stringr::str_split_i(value, ',', 2))
 
-plots <- map(proj_name, ~ {
-  data_x <- vegan::decostand(t(apply(tpm[[.x]], 2, \(x) x / sum(x))), method = 'hellinger') %>% 
-    t %>% data.frame()
-  
-  data_y <- data.table::fread(paste0('../data/', .x, '.kk2.s.bz2')) %>% 
-    column_to_rownames('name') %>% 
-    dplyr::select(any_of(colnames(data_x))) %>% 
-    t() %>% vegan::decostand(method = 'hellinger') %>% 
-    t %>% data.frame()
-  
-  plot_Procrustes(data_x, data_y, dis_method = 'bray', title = .x, show_grid = F, show_line = F,
-                  colors = c(c('#fee722', '#5f7dbe'))) + 
-    theme(aspect.ratio = 1,
-          axis.ticks.length = unit(2, 'mm'),
-          panel.grid.major = element_line(color = 'grey77', linewidth = .4, linetype = 'longdash')) } )
+# gene tpm
+tpm <- map(proj_name, ~ {
+  rc <- data.table::fread(paste0('../data/', .x, '.rc.bz2')) %>% column_to_rownames('name')
+  cvg <- data.table::fread(paste0('../data/', .x, '.cvg.bz2')) %>% column_to_rownames('name')
+  tpm <- rc2tpm(rc, gene_len) * (cvg > 50)
+  tpm[rowSums(tpm) != 0, colSums(tpm) != 0] } ) %>%
+  set_names(proj_name)
+saveRDS(tpm, 'gene.tpm.rds')
 
-cowplot::plot_grid(plotlist = plots, nrow = 2, align = 'v')
-ggsave('procrustes.boxplot.pdf', width = 25, height = 10)
+# gene rc
+rc <- map(proj_name, ~ {
+  cvg <- data.table::fread(paste0('../data/', .x, '.cvg.bz2')) %>% column_to_rownames('name')
+  rc <- data.table::fread(paste0('../data/', .x, '.rc.bz2')) %>% column_to_rownames('name') * (cvg > 50)
+  rc[rowSums(rc) != 0, colSums(rc) != 0] } ) %>%
+  set_names(proj_name)
+saveRDS(rc, 'gene.rc.rds')
 
-data.frame(
-  name = proj_name, 
-  M2 = c(0.2524, 0.4284, 0.6289, 0.3296, 0.4890,
-         0.3863, 0.1776, 0.2355, 0.4831, 0.4649),
-  plab = '***') %>% 
-  ggbarplot('name', 'M2', fill = 'name', palette = 'Spectral', legend = 'none', 
-            x.text.angle = 60, xlab = '', ylab = 'Procrustes M2',
-            label = '***', lab.col = 'red', lab.size = 5) +
-  theme(aspect.ratio = 1/2,
-        axis.ticks.length = unit(2, 'mm'),
-        panel.grid.major = element_line(color = 'grey77', linewidth = .4, linetype = 'longdash'))
-ggsave('procrustes.M2.barplot.pdf', width = 8, height = 5)
+# CF tpm
+tpm <- map(proj_name, ~ {
+  rc <- data.table::fread(paste0('../data/', .x, '.rc.bz2')) %>% column_to_rownames('name')
+  tpm <- rc2tpm(rc, gene_len)
+  tpm[colSums(tpm) != 0, ] %>%
+    mutate(name = gene_info$CF[match(rownames(.), gene_info$name)]) %>%
+    aggregate(. ~ name, ., sum) %>%
+    column_to_rownames('name') %>%
+    filter(rowSums(.) != 0) } ) %>%
+  set_names(proj_name)
+saveRDS(tpm, 'CF.tpm.rds')
+
+# CF rc
+rc <- map(proj_name, ~ {
+  rc <- data.table::fread(paste0('../data/', .x, '.rc.bz2')) %>% column_to_rownames('name')
+  mutate(rc, name = gene_info$CF[match(rownames(rc), gene_info$name)]) %>%
+    aggregate(. ~ name, ., sum) %>%
+    column_to_rownames('name') %>%
+    filter(rowSums(.) != 0) } ) %>%
+  set_names(proj_name)
+saveRDS(rc, 'CF.rc.rds')
+
+group <- map(proj_name, ~ 
+               data.table::fread(paste0('../data/', .x, '.sample_group.bz2')) %>% 
+               select(sample, group)) %>% 
+  set_names(proj_name)
+saveRDS(group, 'group.rds')
+
+#### Fig. 4a ####
+data <- map_dfr(proj_name, ~ {
+  group <- data.table::fread(paste0('../data/', .x, '.sample_group.bz2')) %>% 
+    select(sample, group)
+  stat <- count(group, group)
+  stat <- filter(stat, group != 'HC') %>% 
+    rename(case = n) %>% 
+    add_column(control = unlist(stat[stat$group == 'HC', 'n'])) %>% 
+    add_column(proj = .x) } ) %>% 
+  mutate(group = factor(group, c('CD', 'UC', 'IC', 'IBD')),
+         name = paste0(proj, '|', group)) %>% 
+  arrange(group) %>% 
+  mutate(name = factor(name, name)) %>% 
+  select(-group, -proj) %>% 
+  gather('group', 'value', -name)
+
+name_level <- levels(data$name)
+
+ggbarplot(data, 'name', 'value', rotate = T, fill = 'group', palette = c('#fee722', '#5f7dbe'),
+          ylab = 'Number of samples', xlab = '', legend = 'right') +
+  scale_y_continuous(expand = c(0, 0)) +
+  theme(aspect.ratio = 3,
+        axis.line = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.ticks.length = unit(2, 'mm'), 
+        panel.grid.major = element_line(linewidth = .5, color = 'grey88'),
+        panel.background = element_blank(),
+        panel.border = element_rect(linewidth = .5, color = 'black', fill = 'transparent'))
+ggsave('sample.stat.pdf', width = 8, height = 10)
 
 #### Fig. 4b ####
-get_pc_by_cumsum_var <- function(x, cumsum = .95) {
-  .cumsum <- 0
-  for (i in 1:length(x)) {
-    .cumsum = .cumsum + x[i]
-    if (.cumsum > cumsum) 
-      return(i)
-  }
-}
+tpm <- read_rds('CF.tpm.rds')
 
-calcu_adjusted_r2 <- function(adonis_object) {
-  n_observations <- adonis_object$Df[3]+1
-  d_freedom <- adonis_object$Df[1]
-  r2 <- adonis_object$R2[1]
-  adjusted_r2 <- vegan::RsquareAdj(r2, n_observations, d_freedom)
-  return(adjusted_r2)
-}
+data <- map(proj_name, ~ {
+  group <- read.delim(paste0('../data/', .x, '.sample_group.bz2')) %>% 
+    dplyr::select(sample, group) %>% 
+    filter(sample %in% colnames(tpm[[.x]]))
+  group <- group[match(colnames(tpm[[.x]]), group$sample),]
+  group_level <- intersect(c('HC','IBD','CD','UC','IC'), unique(group$group))
+  
+  map(setdiff(group_level, 'HC'), \(y) {
+    .group <- filter(group, group %in% c(y, 'HC'))
+    .tpm <- tpm[[.x]][, .group$sample]
+    .name = paste0(.x, '.', y)
+    data.frame(value = rowSums(.tpm)) %>% 
+      rownames_to_column('name') %>%
+      rename(!!.name := value) } ) %>% 
+    reduce(~ inner_join(.x, .y, by = 'name'))  } ) %>% 
+  reduce(~ inner_join(.x, .y, by = 'name'))
 
-test <- map(proj_name, ~ {
-  data_x <- data.frame(apply(tpm[[.x]], 2, \(x) x / sum(x))) %>%
-    t() %>% vegan::decostand(method = 'hellinger') %>% 
-    data.frame()
-  
-  data_y <- data.table::fread(paste0('../data/', .x, '.kk2.s.bz2')) %>%
-    column_to_rownames('name') %>%
-    dplyr::select(any_of(rownames(data_x)))
-  
-  dist_y <- vegan::decostand(t(data_y), method = 'hellinger') %>%
-    vegan::vegdist(method = 'bray')
-  
-  # PCA 选择一些成分
-  pca_result <- pca(data_x)
-  pca_summary <- summary(pca_result)
-  pc_axis <- get_pc_by_cumsum_var(pca_summary$cont$importance[2,], cumsum = .95)
-  variables <- scores(pca_result, display = 'sites', choices = 1:pc_axis)
-  
-  adonis <- vegan::adonis2(as.formula(paste0('dist_y ~ ', paste0(colnames(variables), collapse = ' + '))), 
-                           data.frame(variables), permutations = 999, parallel = 80)
-  adonis$r2adj <- c(calcu_adjusted_r2(adonis), NA, NA)
-  adonis$pc_axis <- c(pc_axis, NA, NA)
-  adonis$pc_var <- c(.95, NA, NA)
-  adonis } ) %>% 
-  set_names(proj_name)
-write_rds(test, 'adonis.r2.BAC_by_CF.rds')
+plot_data <- column_to_rownames(data, 'name') %>% 
+  apply(2, \(x) x / sum(x) * 100) %>% 
+  data.frame()
 
-map2_dfr(test, proj_name, ~ data.frame(name = .y, r2adj = .x$r2adj[1], 
-                                       pval = .x$`Pr(>F)`[1], axis = .x$pc_axis[1])) %>% 
-  ggbarplot('name', 'r2adj', fill = 'name', palette = 'Spectral', legend = 'none', 
-            x.text.angle = 60, xlab = '', ylab = 'Adonis r2adj',
-            label = '***', lab.col = 'red', lab.size = 5) +
-  theme(aspect.ratio = 1/2,
-        axis.ticks.length = unit(2, 'mm'),
-        panel.grid.major = element_line(color = 'grey77', linewidth = .4, linetype = 'longdash'))
-ggsave('adonis.r2.BAC_by_CF.barplot.pdf', width = 8, height = 5)
+.names <- rowMeans(plot_data) %>% sort %>% tail(n = 11) %>% names()
+
+rownames_to_column(plot_data, 'name') %>% 
+  mutate(name = ifelse(name %in% .names, name, 'Other CF')) %>%
+  aggregate(. ~ name, ., sum) %>% 
+  filter(name != 'Other CF') %>% 
+  gather('group', 'value', -name) %>% 
+  mutate(group = sub('\\.', '|', group),
+         group = factor(group, name_level)) %>% 
+  ggbarplot('group', 'value', rotate = T, fill = 'name', ylab = 'Relative abundance (%)',
+            xlab = '', legend = 'right') +
+  scale_fill_manual(values = c('#fb8072','#80b1d3','#ffffb3','#fccde5','#ffed6f','#fdb462',
+                               '#b3de69','#8dd3c7','#bebada','#bc80bd','#ccebc5','grey77')) +
+  scale_y_continuous(expand = c(0, 0)) +
+  theme(aspect.ratio = 3,
+        axis.line = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.ticks.length = unit(2, 'mm'), 
+        panel.grid.major = element_line(linewidth = .5, color = 'grey88'),
+        panel.background = element_blank(),
+        panel.border = element_rect(linewidth = .5, color = 'black', fill = 'transparent'))
+ggsave('composition.pdf', width = 8, height = 10)
 
 #### Fig. 4c ####
-get_pc_by_cumsum_var <- function(x, cumsum = .95) {
-  .cumsum <- 0
-  for (i in 1:length(x)) {
-    .cumsum = .cumsum + x[i]
-    if (.cumsum > cumsum) 
-      return(i)
-  }
-}
+tpm <- read_rds('gene.tpm.rds')
+
+data <- map_dfr(proj_name, ~ {
+  group <- read.delim(paste0('../data/', .x, '.sample_group.bz2')) %>% 
+    dplyr::select(sample, group)
+  group_level <- intersect(c('HC','IBD','CD','UC','IC'), unique(group$group))
+  
+  data <- data.frame(value = vegan::diversity(t(tpm[[.x]]), 'shannon')) %>% 
+    rownames_to_column('sample') %>% 
+    left_join(group, by = 'sample') %>% 
+    mutate(group = factor(group, group_level))
+  
+  test <- calcu_diff(data, value ~ group) %>% 
+    add_column(proj = .x) %>% 
+    filter(grepl('HC', comparison)) %>% 
+    mutate(plab = add_plab(pval),
+           name = paste0(proj, '|', sub('HC_vs_', '', comparison))) %>% 
+    select(name, plab)
+  
+  stat <- aggregate(value ~ group, data, mean)
+  stat <- filter(stat, group != 'HC') %>% 
+    rename(case = value) %>% 
+    add_column(control = unlist(stat[stat$group == 'HC', 'value'])) %>% 
+    add_column(proj = .x) %>% 
+    mutate(group = factor(group, c('CD', 'UC', 'IC', 'IBD')),
+           name = paste0(proj, '|', group),
+           log2FC = log2(case / control)) %>% 
+    select(name, log2FC)
+  
+  left_join(stat, test, by = 'name') } )
+
+mutate(data,
+       name = factor(name, name_level),
+       group = str_split_i(name, '\\|', 2)) %>%
+  ggbarplot('name', 'log2FC', rotate = T, fill = 'group',
+            palette = c(UC = '#80b1d3', CD = '#b3de69', IC = '#fdb462', IBD = '#8dd3c7'),
+            ylab = 'Coefficient (Shannon)', xlab = '', legend = 'none') +
+  geom_text(aes(label = plab), color = 'red', vjust = .9) +
+  theme(aspect.ratio = 3,
+        axis.line = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.ticks.length = unit(2, 'mm'), 
+        panel.grid.major = element_line(linewidth = .5, color = 'grey88'),
+        panel.background = element_blank(),
+        panel.border = element_rect(linewidth = .5, color = 'black', fill = 'transparent'))
+ggsave('shannon.pdf', width = 6, height = 10)
+
+#### Fig. 4d ####
+tpm <- read_rds('gene.tpm.rds')
+
+data <- map_dfr(proj_name, ~ {
+  group <- read.delim(paste0('../data/', .x, '.sample_group.bz2')) %>% 
+    dplyr::select(sample, group)
+  group_level <- intersect(c('HC','IBD','CD','UC','IC'), unique(group$group))
+  
+  data <- data.frame(value = colSums(tpm[[.x]] > 0)) %>% 
+    rownames_to_column('sample') %>% 
+    left_join(group, by = 'sample') %>% 
+    mutate(group = factor(group, group_level))
+  
+  test <- calcu_diff(data, value ~ group) %>% 
+    add_column(proj = .x) %>% 
+    filter(grepl('HC', comparison)) %>% 
+    mutate(plab = add_plab(pval),
+           name = paste0(proj, '|', sub('HC_vs_', '', comparison))) %>% 
+    select(name, plab)
+  
+  stat <- aggregate(value ~ group, data, mean)
+  stat <- filter(stat, group != 'HC') %>% 
+    rename(case = value) %>% 
+    add_column(control = unlist(stat[stat$group == 'HC', 'value'])) %>% 
+    add_column(proj = .x) %>% 
+    mutate(group = factor(group, c('CD', 'UC', 'IC', 'IBD')),
+           name = paste0(proj, '|', group),
+           log2FC = log2(case / control)) %>% 
+    select(name, log2FC)
+  
+  left_join(stat, test, by = 'name') } )
+
+mutate(data,
+       name = factor(name, name_level),
+       group = str_split_i(name, '\\|', 2)) %>%
+  ggbarplot('name', 'log2FC', rotate = T, fill = 'group',
+            palette = c(UC = '#80b1d3', CD = '#b3de69', IC = '#fdb462', IBD = '#8dd3c7'),
+            ylab = 'Coefficient (# CF gene homologs)', xlab = '', legend = 'none') +
+  geom_text(aes(label = plab), color = 'red', vjust = .9) +
+  theme(aspect.ratio = 3,
+        axis.line = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.ticks.length = unit(2, 'mm'), 
+        panel.grid.major = element_line(linewidth = .5, color = 'grey88'),
+        panel.background = element_blank(),
+        panel.border = element_rect(linewidth = .5, color = 'black', fill = 'transparent'))
+ggsave('richness.pdf', width = 6, height = 10)
+
+#### Fig. 4f ####
+tpm <- read_rds('gene.tpm.rds')
 
 calcu_adjusted_r2 <- function(adonis_object) {
   n_observations <- adonis_object$Df[3]+1
@@ -114,98 +244,217 @@ calcu_adjusted_r2 <- function(adonis_object) {
   r2 <- adonis_object$R2[1]
   adjusted_r2 <- vegan::RsquareAdj(r2, n_observations, d_freedom)
   return(adjusted_r2)
-} 
+}
 
-test <- map(proj_name, ~ {
-  data_x <- data.table::fread(paste0('../data/', .x, '.kk2.s.bz2')) %>%
-    column_to_rownames('name') %>% 
-    t() %>% vegan::decostand(method = 'hellinger') %>% 
-    data.frame()
+data <- map_dfr(proj_name, ~ {
+  group <- read.delim(paste0('../data/', .x, '.sample_group.bz2')) %>% 
+    dplyr::select(sample, group) %>% 
+    filter(sample %in% colnames(tpm[[.x]]))
+  group <- group[match(colnames(tpm[[.x]]), group$sample),]
+  group_level <- intersect(c('HC','IBD','CD','UC','IC'), unique(group$group))
   
-  data_y <- data.frame(apply(tpm[[.x]], 2, \(x) x / sum(x))) %>%
-    dplyr::select(any_of(rownames(data_x)))
-  
-  dist_y <- decostand(t(data_y), method = 'hellinger') %>%
-    vegan::vegdist(method = 'bray')
-  
-  # PCA 选择一些成分
-  pca_result <- pca(data_x)
-  pca_summary <- summary(pca_result)
-  pc_axis <- get_pc_by_cumsum_var(pca_summary$cont$importance[2,], cumsum = .95)
-  variables <- scores(pca_result, display = 'sites', choices = 1:pc_axis)
-  
-  adonis <- vegan::adonis2(as.formula(paste0('dist_y ~ ', paste0(colnames(variables), collapse = ' + '))), 
-                           data.frame(variables), permutations = 999, parallel = 80)
-  adonis$r2adj <- c(calcu_adjusted_r2(adonis), NA, NA)
-  adonis$pc_axis <- c(pc_axis, NA, NA)
-  adonis$pc_var <- c(.95, NA, NA)
-  adonis } ) %>% 
-  set_names(proj_name)
-write_rds(test, 'adonis.r2.CF_by_BAC.rds')
+  map_dfr(setdiff(group_level, 'HC'), \(y) {
+    .group <- filter(group, group %in% c(y, 'HC'))
+    .tpm <- tpm[[.x]][, .group$sample]
+    adonis <- vegan::adonis2(t(.tpm) ~ group, .group, permutations = 999, 
+                             distance = 'bray', parallel = 110)
+    r2adj <- calcu_adjusted_r2(adonis)
+    data.frame(name = paste0(.x, '|', y), r2 = adonis$R2[1], r2adj = r2adj, pval = adonis$`Pr(>F)`[1])
+  } )
+} )
+openxlsx::write.xlsx(data, 'adonis.xlsx')
 
-map2_dfr(test, proj_name, ~ data.frame(name = .y, r2adj = .x$r2adj[1], 
-                                       pval = .x$`Pr(>F)`[1], axis = .x$pc_axis[1])) %>% 
-  ggbarplot('name', 'r2adj', fill = 'name', palette = 'Spectral', legend = 'none', 
-            x.text.angle = 60, xlab = '', ylab = 'Adonis r2adj',
-            label = '***', lab.col = 'red', lab.size = 5) +
-  theme(aspect.ratio = 1/2,
-        axis.ticks.length = unit(2, 'mm'),
-        panel.grid.major = element_line(color = 'grey77', linewidth = .4, linetype = 'longdash'))
-ggsave('adonis.r2.CF_by_BAC.barplot.pdf', width = 8, height = 5)
-
-#### Fig. 4d ####
-test <- map(proj_name, ~ {
-  data_x <- data.frame(apply(tpm[[.x]], 2, \(x) x / sum(x))) %>%
-    t() %>% vegan::decostand(method = 'hellinger') %>% 
-    data.frame()
-  
-  data_y <- data.table::fread(paste0('../data/', .x, '.kk2.s.bz2')) %>%
-    column_to_rownames('name') %>%
-    dplyr::select(any_of(rownames(data_x)))
-  
-  dist_y <- vegan::decostand(t(data_y), method = 'hellinger') %>%
-    vegan::vegdist(method = 'bray')
-  
-  map(colnames(data_x), \(x) {
-    adonis <- vegan::adonis2(as.formula(paste0('dist_y ~ ', x )), data_x, permutations = 999, parallel = 80) 
-    adonis$r2adj <- c(calcu_adjusted_r2(adonis), NA, NA)
-    adonis }) %>%  
-    set_names(colnames(data_x)) } ) %>% 
-  set_names(proj_name)
-write_rds(test, 'adonis.r2.single.rds')
-
-data <- map2_dfr(test, names(test), \(x, y) 
-                 map2_dfr(x, names(x), \(i, j)
-                          data.frame(dataset = y, gene = j, r2adj = i$r2adj[1], pval = i$`Pr(>F)`[1]) ) ) %>% 
-  mutate(plab = add_plab(pval, format = 4))
-# openxlsx::write.xlsx(data, 'association/adonis.r2.single.xlsx')
-
-plot_tile <- select(data, dataset, gene, r2adj) %>% 
-  spread('gene', 'r2adj', fill = 0) %>% 
-  column_to_rownames('dataset')
-
-dataset_level <- rownames(plot_tile)[hclust(dist(plot_tile))$order]
-gene_level <- colnames(plot_tile)[hclust(dist(t(plot_tile)))$order]
-
-CF_info <- read.delim('../Figure1/pfam.rename.tsv')
-
-rownames_to_column(plot_tile, 'dataset') %>% 
-  gather('gene', 'value', -dataset) %>% 
-  mutate(gene = factor(gene, gene_level),
-         dataset = factor(dataset, dataset_level)) %>% 
-  ggplot(aes(gene, dataset)) +
-  geom_tile(aes(fill = value)) +
-  geom_text(aes(gene, dataset, label = plab), data, inherit.aes = F, size = 3) +
-  scale_x_discrete(
-    breaks = gene_level, 
-    labels = paste0(gene_level, ' (', CF_info$pfam[match(gene_level, CF_info$name)], ')') ) +
-  scale_fill_gradientn(colors = rev(pald('Spectral')[-11])) +
-  labs(x = '', y = '', fill = 'adjusted R2') +
-  coord_fixed() +
-  theme(axis.ticks = element_blank(),
-        axis.text = element_text(color = '#000000', size = 10),
-        axis.text.x = element_text(angle = 90, vjust = .5, hjust = 1),
-        panel.grid = element_blank(),
+mutate(data,
+       name = factor(name, name_level),
+       plab = add_plab(pval),
+       group = str_split_i(name, '\\|', 2)) %>%
+  ggbarplot('name', 'r2adj', rotate = T, fill = 'group',
+            palette = c(UC = '#80b1d3', CD = '#b3de69', IC = '#fdb462', IBD = '#8dd3c7'),
+            ylab = 'Adjust R2 (adonis)', xlab = '', legend = 'none') +
+  geom_text(aes(label = plab), color = 'red', vjust = .9) +
+  theme(aspect.ratio = 3,
+        axis.line = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.ticks.length = unit(2, 'mm'), 
+        panel.grid.major = element_line(linewidth = .5, color = 'grey88'),
         panel.background = element_blank(),
-        panel.border = element_rect(linewidth = .8, color = 'black', fill = 'transparent'))
-ggsave('adonis.r2.single.pdf', width = 16, height = 6)
+        panel.border = element_rect(linewidth = .5, color = 'black', fill = 'transparent'))
+ggsave('adonis.pdf', width = 6, height = 10)
+
+#### Fig. S4a ####
+tpm <- read_rds('CF.tpm.rds')
+
+data <- map_dfr(
+  proj_name, ~ {
+    group <- data.table::fread(
+      paste0(
+        '../data/',
+        .x, '.sample_group.bz2')) %>% 
+      select(sample, group)
+    
+    group_level <- intersect(c('HC','IBD','CD','UC','IC'), unique(group$group))
+    
+    data <- data.frame(
+      value = vegan::diversity(t(tpm[[.x]]), 'shannon')
+    ) %>% 
+      rownames_to_column('sample') %>% 
+      left_join(group, by = 'sample') %>% 
+      mutate(group = factor(group, group_level))
+    
+    test <- calcu_diff(data, value ~ group) %>% 
+      filter(grepl('HC', comparison)) %>% 
+      mutate(
+        proj = .x, 
+        plab = add_plab(pval),
+        name = paste0(proj, '|', sub('HC_vs_', '', comparison)))
+    
+    stat <- aggregate(value ~ group, data, mean)
+    
+    stat <- filter(stat, group != 'HC') %>% 
+      rename(case = value) %>% 
+      mutate(
+        control = stat$value[stat$group == 'HC'], 
+        proj = .x, 
+        group = factor(group, c('CD', 'UC', 'IC', 'IBD')),
+        name = paste0(proj, '|', group),
+        log2FC = log2(case / control)
+      ) |> 
+      select(-proj, -group)
+    
+    left_join(stat, test, by = 'name') 
+  }, .progress = T
+)
+
+mutate(
+  data,
+  name = factor(name, name_level),
+  group = str_split_i(name, '\\|', 2)
+) %>%
+  ggbarplot(
+    'name', 'log2FC', rotate = T, fill = 'group', legend = 'none',
+    palette = c(UC = '#80b1d3', CD = '#b3de69', IC = '#fdb462', IBD = '#8dd3c7'),
+    ylab = 'Shannon coefficient', xlab = '') +
+  geom_text(aes(label = plab), color = 'red', vjust = .9) +
+  theme(
+    aspect.ratio = 3,
+    axis.line = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks.length = unit(2, 'mm'), 
+    panel.grid.major = element_line(linewidth = .5, color = 'grey88'),
+    panel.background = element_blank(),
+    panel.border = element_rect(fill = NA, linewidth = .5, color = 'black')
+  )
+
+ggsave('fam_shannon_div.pdf', width = 4, height = 8)
+
+#### Fig. S4b ####
+data <- map_dfr(
+  proj_name, ~ {
+    group <- data.table::fread(
+      paste0(
+        '../data/', .x, '.sample_group.bz2')) %>% 
+      select(sample, group)
+    
+    group_level <- intersect(c('HC','IBD','CD','UC','IC'), unique(group$group))
+    
+    data <- data.frame(value = colSums(tpm[[.x]] > 0)) %>% 
+      rownames_to_column('sample') %>% 
+      left_join(group, by = 'sample') %>% 
+      mutate(group = factor(group, group_level))
+    
+    test <- calcu_diff(data, value ~ group) %>% 
+      filter(grepl('HC', comparison)) %>% 
+      mutate(
+        proj = .x, 
+        plab = add_plab(pval),
+        name = paste0(proj, '|', sub('HC_vs_', '', comparison)))
+    
+    stat <- aggregate(value ~ group, data, mean)
+    
+    stat <- filter(stat, group != 'HC') %>% 
+      rename(case = value) %>% 
+      mutate(
+        control = stat$value[stat$group == 'HC'], 
+        proj = .x, 
+        group = factor(group, c('CD', 'UC', 'IC', 'IBD')),
+        name = paste0(proj, '|', group),
+        log2FC = log2(case / control)
+      ) %>%  
+      select(-group, -proj)
+    
+    left_join(stat, test, by = 'name') 
+  }, .progress = T
+)
+
+mutate(
+  data,
+  name = factor(name, name_level),
+  group = str_split_i(name, '\\|', 2)
+) %>%
+  ggbarplot(
+    'name', 'log2FC', rotate = T, fill = 'group', legend = 'none',
+    palette = c(UC = '#80b1d3', CD = '#b3de69', IC = '#fdb462', IBD = '#8dd3c7'),
+    ylab = 'Richness coefficient', xlab = '') +
+  geom_text(aes(label = plab), color = 'red', vjust = .9) +
+  theme(
+    aspect.ratio = 3,
+    axis.line = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks.length = unit(2, 'mm'), 
+    panel.grid.major = element_line(linewidth = .5, color = 'grey88'),
+    panel.background = element_blank(),
+    panel.border = element_rect(fill = NA, linewidth = .5, color = 'black')
+  )
+
+ggsave('fam_richness_div.pdf', width = 4, height = 8)
+
+#### Fig. S4c ####
+data <- map_dfr(
+  proj_name, ~ {
+    group <- data.table::fread(
+      paste0(
+        '../data', .x, '.sample_group.gz')) %>% 
+      select(sample, group) |> 
+      filter(sample %in% colnames(tpm[[.x]])) |> 
+      data.frame()
+    group <- group[match(colnames(tpm[[.x]]), group$sample),]
+    group_level <- intersect(c('HC','IBD','CD','UC','IC'), unique(group$group))
+    
+    map_dfr(
+      setdiff(group_level, 'HC'), \(x) {
+        .group <- filter(group, group %in% c(x, 'HC'))
+        .tpm <- tpm[[.x]][, .group$sample]
+        
+        adonis <- vegan::adonis2(
+          t(.tpm) ~ group, .group, permutations = 999, 
+          distance = 'bray', parallel = 110)
+        tibble(
+          name = paste0(.x, '|', x), 
+          r2 = adonis$R2[1], 
+          r2adj = calcu_adjusted_r2(adonis), 
+          pval = adonis$`Pr(>F)`[1]
+        )
+      } )
+  }, .progress = T)
+
+mutate(
+  data,
+  name = factor(name, name_level),
+  plab = add_plab(pval),
+  group = str_split_i(name, '\\|', 2)) %>%
+  ggbarplot(
+    'name', 'r2adj', rotate = T, fill = 'group', legend = 'none',
+    palette = c(UC = '#80b1d3', CD = '#b3de69', IC = '#fdb462', IBD = '#8dd3c7'),
+    ylab = 'Adjusted R2', xlab = '') +
+  geom_text(aes(label = plab), color = 'red', vjust = .9) +
+  theme(
+    aspect.ratio = 3,
+    axis.line = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.ticks.length = unit(2, 'mm'), 
+    panel.grid.major = element_line(linewidth = .5, color = 'grey88'),
+    panel.background = element_blank(),
+    panel.border = element_rect(fill = NA, linewidth = .5, color = 'black')
+  )
+
+ggsave('fam_adonis_div.pdf', width = 4, height = 8)
