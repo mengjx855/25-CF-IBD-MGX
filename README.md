@@ -12,7 +12,7 @@
 - eggnog database (v5.0),
 - PhyloPhlAn (v3.1.68),
 - iTOL (v7.3, https://itol.embl.de/), 
-- MCL (mcxload 22-282), 
+- MCL (22-282), 
 - fastp (v0.24), 
 - Bowtie2 (v2.5.4),
 - Samtools (v1.21), 
