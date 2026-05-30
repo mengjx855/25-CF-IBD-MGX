@@ -12,6 +12,7 @@
 - eggnog database (v5.0),
 - PhyloPhlAn (v3.1.68),
 - iTOL (v7.3, https://itol.embl.de/), 
+- MCL (mcxload 22-282), 
 - fastp (v0.24), 
 - Bowtie2 (v2.5.4),
 - Samtools (v1.21), 
@@ -35,4 +36,4 @@
 - Pandas package (v2.2.3)
 
 If you find this code useful, we would appreciate if you cite our paper.  
-> Meng, Jin-Xin, et al. "An atlas of colonization factors in human gut microbiome reveals conserved microbial strategies and inflammatory bowel disease signatures." *(In preparation, 2026)*.
+> Meng, Jin-Xin, et al. "An atlas of colonization factors in human gut microbiome reveals colonization strategies and inflammatory bowel disease signatures." *(In preparation, 2026)*.
