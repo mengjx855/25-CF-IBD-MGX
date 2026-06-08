@@ -12,7 +12,7 @@
 - Python (v3.10.16)
 - R (v4.4.3)
 
-**Softwares used in this project as follow:**
+**Softwares used in this project as follow**
 - Cytoscape (v3.10.3),
 - DIAMOND (v2.1.11.165),
 - eggNOG-mapper (v2.1),
