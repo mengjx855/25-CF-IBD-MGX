@@ -25,20 +25,20 @@
 - Samtools (v1.21), 
 - Kraken2 (v2.1.3), 
 - Bracken (v3.0.1),
-- clusterSim package (v0.51-5), 
-- vegan package (v2.7),
-- ape package (v5.8)
-- metafor package (v3.8-0),
-- randomForest package (v4.7),
-- pROC package (v1.19), 
-- rstatix package (v0.7.2), 
-- DESeq2 package (v1.46), 
-- clusterProfiler package (v4.17),
-- ggplot2 package (v3.5.2),
-- ggtern package (v3.5),
-- ggpubr package (v0.6.1), 
-- Numpy package (v2.1.3),
-- Pandas package (v2.2.3)
+- clusterSim (v0.51-5), 
+- vegan (v2.7),
+- ape (v5.8)
+- metafor (v3.8-0),
+- randomForest (v4.7),
+- pROC (v1.19), 
+- rstatix (v0.7.2), 
+- DESeq2 (v1.46), 
+- clusterProfiler (v4.17),
+- ggplot2 (v3.5.2),
+- ggtern (v3.5),
+- ggpubr (v0.6.1), 
+- Numpy (v2.1.3),
+- Pandas (v2.2.3)
 
 
 If you find this code useful, we would appreciate if you cite our paper.  
