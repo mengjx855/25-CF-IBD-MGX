@@ -42,4 +42,4 @@
 
 
 If you find this code useful, we would appreciate if you cite our paper.  
-> Meng, Jin-Xin, et al. "An atlas of colonization factors in the human gut microbiome reveals ecological strategies and inflammatory bowel disease signatures." *(Nature Communications, In revision, 2026)*.
+> Meng, Jin-Xin, et al. "An atlas of colonization factors in the human gut microbiome reveals ecological strategies and inflammatory bowel disease signatures." *(Nature Communications, Under review, 2026)*.
