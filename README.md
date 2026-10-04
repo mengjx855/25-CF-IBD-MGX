@@ -105,6 +105,7 @@ Analyses were performed under:
 - Ubuntu 24.04.4
 - Python 3.10.16
 - R 4.4.3
+- Perl 5.38.2
 
 ### Command-line software
 
@@ -122,6 +123,8 @@ Analyses were performed under:
 | Bracken | 3.0.1 |
 | Cytoscape | 3.10.3 |
 | iTOL | 7.3 |
+| GNU Parallel | 20250222 |
+| seqkit | 2.10.0 |
 
 ### Major R packages
 
